@@ -540,6 +540,10 @@ add_executable(fattn-train-test tools/fattn-train-test.cpp)
 target_link_libraries(fattn-train-test PRIVATE yyjson)
 link_ggml_backends(fattn-train-test)
 
+# yue2-recompose-test: a recomposed draw keeps the supplied score (#234). No GPU.
+add_executable(yue2-recompose-test tools/yue2-recompose-test.cpp)
+target_include_directories(yue2-recompose-test PRIVATE src)
+
 # convrot-graph-probe: ConvRot8 forward/backward under repeated CUDA graph
 # capture and replay, with a cuBLAS API log check for stream resets. CUDA only.
 if(GGML_CUDA AND CUDAToolkit_FOUND)

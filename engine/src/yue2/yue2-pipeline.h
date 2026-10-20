@@ -31,6 +31,7 @@
 #include "yue2-lyric-schedule.h"
 #include "yue2-model.h"
 #include "yue2-nar-graph.h"
+#include "yue2-recompose.h"
 #include "yue2-request.h"
 #include "yue2-sample.h"
 #include "yue2-tokenizer.h"
@@ -1789,12 +1790,7 @@ static bool yue2_pipeline_run_ar(Yue2Model & m, const BPETokenizer & tok, Yue2Re
             const Yue2SongState & sg = songs[(size_t) runaway[r]];
             for (int d = 0; d < want[r]; d++) {
                 Yue2SongState ds;
-                ds.src_song   = sg.src_song;
-                ds.style      = sg.style;
-                ds.lyrics     = sg.lyrics;
-                ds.abc_ids    = sg.abc_ids;
-                ds.score_abc  = sg.score_abc;
-                ds.noise_seed = sg.noise_seed;
+                yue2_recompose_copy(ds, sg);  // keeps the supplied score (#234)
                 // Try n of a song draws with its seed + n x 1000003, the step
                 // the server reads its recompose count back from.
                 ds.seed = sg.seed + 1000003ull * (uint64_t) (tries[(size_t) runaway[r]] + d + 1);
