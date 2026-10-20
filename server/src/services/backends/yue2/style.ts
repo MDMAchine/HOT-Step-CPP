@@ -149,6 +149,12 @@ export function applyYue2StyleTemplate(parts: Yue2StyleParts): string {
   if (opener && cap.toLowerCase().startsWith(opener.toLowerCase())) {
     cap = squash(cap.slice(opener.length));
   }
+  if (upstream && trigger) {
+    // The create path prefixes a bare "<trigger>, " (#238); drop one so the
+    // opener is not followed by the trigger a second time.
+    const esc = trigger.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    cap = squash(cap.replace(new RegExp(`^${esc}\\s*,\\s*`, 'i'), ''));
+  }
   if (upstream) {
     const end = tail(parts);
     if (end && cap.toLowerCase().endsWith(end.toLowerCase())) {
