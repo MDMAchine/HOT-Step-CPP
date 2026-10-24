@@ -678,6 +678,7 @@ link_ggml_backends(yue2-rms-double-round-test)
 # fault injection (ACE_FAULT_BACKEND_ERROR) and teardown recovery.
 add_executable(backend-health-test tools/backend-health-test.cpp)
 link_ggml_backends(backend-health-test)
+target_compile_definitions(backend-health-test PRIVATE ACE_ENABLE_FAULT_INJECTION)
 
 # yue2-linear-lora-round-test: checks whether removing the seemingly
 # redundant round(ctx, x) in yue2-aitk-graph.h's linear() (LoRA branch)

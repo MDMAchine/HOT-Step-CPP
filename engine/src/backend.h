@@ -50,12 +50,18 @@ inline int         g_backend_refs  = 0;
 // until a fresh backend_init (refs back from 0) clears it. A no-op when unset.
 inline bool g_backend_poisoned = false;
 
+// Compiled in only when ACE_ENABLE_FAULT_INJECTION is defined (the
+// backend-health-test target); release builds get an empty fault point.
 static void backend_fault_point(const char * site) {
+#ifdef ACE_ENABLE_FAULT_INJECTION
     const char * want = std::getenv("ACE_FAULT_BACKEND_ERROR");
     if (want && site && strcmp(want, site) == 0 && g_backend_refs > 0) {
         g_backend_poisoned = true;
         fprintf(stderr, "[Fault] ACE_FAULT_BACKEND_ERROR=%s: backend marked poisoned%s", site, "\n");
     }
+#else
+    (void) site;
+#endif
 }
 
 // A compute result, folded with the injected poison flag.

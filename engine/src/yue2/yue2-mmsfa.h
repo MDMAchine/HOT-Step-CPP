@@ -174,6 +174,7 @@
 #include <cstring>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -602,6 +603,12 @@ struct Yue2MmsfaOptions {
     // GELU flavour. false = exact erf, which is what the pin says and what the
     // fixtures confirm at conv0 AND at layer0. See trap 5 before flipping it.
     bool gelu_tanh = false;
+
+    // #242: locks held around the post-compute backend health probe so it
+    // never touches the shared backend while a job computes on it. Taken in
+    // order (probe_lock, then probe_lock2); null = none (offline tools).
+    std::mutex * probe_lock  = nullptr;
+    std::mutex * probe_lock2 = nullptr;
 
     // Attention score-tensor byte budget. A head's [T_k, T_q] score block is
     // split into query chunks so that no single one exceeds this. 0 = no
@@ -1139,7 +1146,18 @@ static bool yue2_mmsfa_emissions(const Yue2MmsfaModel & m, Yue2MmsfaGraph * g, c
     // On Metal the submit is async: a command buffer failure only shows at
     // synchronize, inside the tensor read below, which carries no status and
     // would hand back garbage logits as a success (#242). Probe first.
-    if (!backend_healthy()) {
+    bool healthy;
+    {
+        std::unique_lock<std::mutex> l1, l2;
+        if (opt.probe_lock) {
+            l1 = std::unique_lock<std::mutex>(*opt.probe_lock);
+        }
+        if (opt.probe_lock2) {
+            l2 = std::unique_lock<std::mutex>(*opt.probe_lock2);
+        }
+        healthy = backend_healthy();
+    }
+    if (!healthy) {
         if (err) {
             *err = "MMS_FA compute failed on the GPU backend (device error)";
         }
