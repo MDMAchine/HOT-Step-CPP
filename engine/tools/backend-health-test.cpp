@@ -10,6 +10,8 @@
 // ends the way the fixed code should (align fails loudly, then prefill runs on
 // a fresh backend; or a clear error when another model holds the backend).
 
+#include <string>
+
 #include "backend.h"
 
 #include <cstdio>

@@ -54,8 +54,7 @@ static void backend_fault_point(const char * site) {
     const char * want = std::getenv("ACE_FAULT_BACKEND_ERROR");
     if (want && site && strcmp(want, site) == 0 && g_backend_refs > 0) {
         g_backend_poisoned = true;
-        fprintf(stderr, "[Fault] ACE_FAULT_BACKEND_ERROR=%s: backend marked poisoned
-", site);
+        fprintf(stderr, "[Fault] ACE_FAULT_BACKEND_ERROR=%s: backend marked poisoned%s", site, "\n");
     }
 }
 

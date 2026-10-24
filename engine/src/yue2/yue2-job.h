@@ -501,8 +501,7 @@ static void yue2_synth_worker(std::shared_ptr<Job> job, Yue2Request req_in) {
     // another model still holds a ref, the backend cannot be recreated here.
     // Lock order: g_yue2_mutex (held), then g_yue2_nar_mutex, then backend.
     if (!backend_healthy()) {
-        fprintf(stderr, "[YuE2-Job] %s: GPU backend unhealthy before prefill, unloading YuE2 to recover
-",
+        fprintf(stderr, "[YuE2-Job] %s: GPU backend unhealthy before prefill, unloading YuE2 to recover\n",
                 job->id.c_str());
         bool recovered = false;
         if (yue2_nar_lane_drain("backend recovery")) {
@@ -514,8 +513,7 @@ static void yue2_synth_worker(std::shared_ptr<Job> job, Yue2Request req_in) {
                                             req->vae_variant, /*want_encoder=*/false, &err);
                 recovered = recovered && backend_healthy();
             } else {
-                fprintf(stderr, "[YuE2-Job] %s: %d backend ref(s) held outside YuE2, cannot recreate it
-",
+                fprintf(stderr, "[YuE2-Job] %s: %d backend ref(s) held outside YuE2, cannot recreate it\n",
                         job->id.c_str(), g_backend_refs);
                 err = "GPU backend in error state, unload models to recover";
             }
@@ -527,8 +525,7 @@ static void yue2_synth_worker(std::shared_ptr<Job> job, Yue2Request req_in) {
             job->status.store(2);
             return;
         }
-        fprintf(stderr, "[YuE2-Job] %s: backend recreated, continuing
-", job->id.c_str());
+        fprintf(stderr, "[YuE2-Job] %s: backend recreated, continuing\n", job->id.c_str());
     }
 
     Yue2ProgressFn progress = [job](const Yue2Progress & p) {
