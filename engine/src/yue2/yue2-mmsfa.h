@@ -1146,16 +1146,26 @@ static bool yue2_mmsfa_emissions(const Yue2MmsfaModel & m, Yue2MmsfaGraph * g, c
     // On Metal the submit is async: a command buffer failure only shows at
     // synchronize, inside the tensor read below, which carries no status and
     // would hand back garbage logits as a success (#242). Probe first.
-    bool healthy;
+    // The job locks are only tried: a running job holds them for its whole
+    // render, and the job path probes again before its own prefill, so a
+    // busy lane means skip the probe rather than block the align request.
+    bool healthy = true;
     {
         std::unique_lock<std::mutex> l1, l2;
+        bool                         got = true;
         if (opt.probe_lock) {
-            l1 = std::unique_lock<std::mutex>(*opt.probe_lock);
+            l1  = std::unique_lock<std::mutex>(*opt.probe_lock, std::try_to_lock);
+            got = l1.owns_lock();
         }
-        if (opt.probe_lock2) {
-            l2 = std::unique_lock<std::mutex>(*opt.probe_lock2);
+        if (got && opt.probe_lock2) {
+            l2  = std::unique_lock<std::mutex>(*opt.probe_lock2, std::try_to_lock);
+            got = l2.owns_lock();
         }
-        healthy = backend_healthy();
+        if (got) {
+            healthy = backend_healthy();
+        } else {
+            fprintf(stderr, "[YUE2-ALIGN] backend health unknown (job running), probe skipped\n");
+        }
     }
     if (!healthy) {
         if (err) {

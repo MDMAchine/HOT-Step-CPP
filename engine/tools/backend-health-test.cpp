@@ -84,7 +84,10 @@ int main(int argc, char ** argv) {
             printf("RESULT: %s (expected other-holder failure, refs=%d)\n", pass ? "PASS" : "FAIL", g_backend_refs);
             return pass ? 0 : 1;
         }
-        printf("JOB: recover rc=%d, healthy=%d, poisoned=%d\n", (int) rc, (int) backend_healthy(),
+        const char * rc_name = rc == BackendRecover::OK             ? "OK" :
+                               rc == BackendRecover::OTHER_HOLDER   ? "OTHER_HOLDER" :
+                                                                      "RELOAD_FAILED";
+        printf("JOB: recover rc=%s, healthy=%d, poisoned=%d\n", rc_name, (int) backend_healthy(),
                (int) g_backend_poisoned);
         if (rc != BackendRecover::OK) {
             return 1;

@@ -884,8 +884,9 @@ static void yue2_handle_align(const httplib::Request & req, httplib::Response & 
 
     Yue2MmsfaGraph     g;
     std::vector<float> em;
-    // The health probe after the forward runs under the job locks (#242), in
-    // their order: g_yue2_mutex, then g_yue2_nar_mutex. Neither is held here.
+    // The health probe after the forward try-locks the job locks (#242), in
+    // their order: g_yue2_mutex, then g_yue2_nar_mutex; a running job holds
+    // them, so the probe is skipped then. Neither is held here.
     Yue2MmsfaOptions   mopt;
     mopt.probe_lock  = &g_yue2_mutex;
     mopt.probe_lock2 = &g_yue2_nar_mutex;
