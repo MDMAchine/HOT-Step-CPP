@@ -68,17 +68,27 @@ int main(int argc, char ** argv) {
     }
     backend_release(mm.backend, mm.cpu_backend);
 
-    // Next job: probe before the prefill, recover by full teardown.
+    // Next job: probe before the prefill, recover through the same teardown
+    // helper the YuE2 job path uses (backend_teardown_recover).
     if (probe && !backend_healthy()) {
         printf("JOB: backend unhealthy before prefill, unloading YuE2\n");
-        backend_release(ar.backend, ar.cpu_backend);
-        if (g_backend_refs != 0) {
+        BackendRecover rc = backend_teardown_recover([&] { backend_release(ar.backend, ar.cpu_backend); },
+                                                     [&] {
+                                                         ar = backend_init("YuE2-AR");
+                                                         return ar.backend != nullptr;
+                                                     });
+        if (rc == BackendRecover::OTHER_HOLDER) {
             printf("JOB: FAILED: GPU backend in error state, unload models to recover (refs=%d)\n", g_backend_refs);
-            if (other) backend_release(ext.backend, ext.cpu_backend);
-            return other ? 0 : 1;
+            backend_release(ext.backend, ext.cpu_backend);
+            bool pass = other && g_backend_refs == 0;
+            printf("RESULT: %s (expected other-holder failure, refs=%d)\n", pass ? "PASS" : "FAIL", g_backend_refs);
+            return pass ? 0 : 1;
         }
-        ar = backend_init("YuE2-AR");
-        printf("JOB: backend recreated, healthy=%d\n", (int) backend_healthy());
+        printf("JOB: recover rc=%d, healthy=%d, poisoned=%d\n", (int) rc, (int) backend_healthy(),
+               (int) g_backend_poisoned);
+        if (rc != BackendRecover::OK) {
+            return 1;
+        }
     }
     std::vector<float> pf;
     bool               pre_ok = run_graph(ar.backend, 0.5f, &pf);
@@ -86,6 +96,16 @@ int main(int argc, char ** argv) {
     backend_release(ar.backend, ar.cpu_backend);
     if (other) backend_release(ext.backend, ext.cpu_backend);
     printf("RELEASE: refs=%d\n", g_backend_refs);
-    if (other && getenv("ACE_FAULT_BACKEND_ERROR")) return 1;  // should have failed with the clear message
-    return pre_ok && g_backend_refs == 0 ? 0 : 1;
+
+    // State asserts: align output must be right when it reports success, the
+    // prefill must compute 5 * 0.5 = 2.5 on a healthy backend, nothing leaks.
+    const bool faulted = getenv("ACE_FAULT_BACKEND_ERROR") != nullptr;
+    bool       pass    = pre_ok && pf[5] == 2.5f && g_backend_refs == 0 && !g_backend_poisoned;
+    if (align_ok && em[5] != 15.0f) pass = false;
+    if (faulted && align_ok) pass = false;     // the fault must surface at align
+    if (!faulted && !align_ok) pass = false;   // and not without it
+    if (other && faulted) pass = false;        // should have failed with the clear message
+    printf("RESULT: %s (align_ok=%d em[5]=%.2f pre_ok=%d out[5]=%.2f refs=%d poisoned=%d)\n", pass ? "PASS" : "FAIL",
+           (int) align_ok, em[5], (int) pre_ok, pf[5], g_backend_refs, (int) g_backend_poisoned);
+    return pass ? 0 : 1;
 }

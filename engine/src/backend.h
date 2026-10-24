@@ -485,6 +485,25 @@ static bool backend_healthy() {
     return ok;
 }
 
+// Teardown recovery for a poisoned backend (#242). Every resident buffer lives
+// on the old backend, so an in-place swap is not possible: unload() must drop
+// all of the caller's backend refs, then, if no one else holds one (refs at 0,
+// which frees the backend and clears the poison), reload() builds it fresh.
+// Shared by the YuE2 job path and engine/tools/backend-health-test.cpp.
+enum class BackendRecover { OK, OTHER_HOLDER, RELOAD_FAILED };
+
+template <class Unload, class Reload>
+static BackendRecover backend_teardown_recover(Unload && unload, Reload && reload) {
+    unload();
+    if (g_backend_refs != 0) {
+        return BackendRecover::OTHER_HOLDER;
+    }
+    if (!reload() || !backend_healthy()) {
+        return BackendRecover::RELOAD_FAILED;
+    }
+    return BackendRecover::OK;
+}
+
 // A second backend instance on the same device as the shared one: its own
 // stream, pool and handles, so a graph computed on it from another thread
 // overlaps the shared backend's work instead of queueing behind it. Buffers

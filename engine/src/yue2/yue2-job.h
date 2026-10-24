@@ -506,17 +506,23 @@ static void yue2_synth_worker(std::shared_ptr<Job> job, Yue2Request req_in) {
         bool recovered = false;
         if (yue2_nar_lane_drain("backend recovery")) {
             std::lock_guard<std::mutex> nar_lock(g_yue2_nar_mutex);
-            yue2_unload(&g_yue2);
-            if (g_backend_refs == 0) {
-                recovered = evict_strict ||
-                            yue2_load_parts(&g_yue2, /*want_lm=*/true, /*want_vae=*/!req->plan_only && !req->semantic_only,
-                                            req->vae_variant, /*want_encoder=*/false, &err);
-                recovered = recovered && backend_healthy();
-            } else {
+            const BackendRecover rc = backend_teardown_recover(
+                [&] { yue2_unload(&g_yue2); },
+                [&] {
+                    return evict_strict ||
+                           yue2_load_parts(&g_yue2, /*want_lm=*/true, /*want_vae=*/!req->plan_only && !req->semantic_only,
+                                           req->vae_variant, /*want_encoder=*/false, &err);
+                });
+            recovered = rc == BackendRecover::OK;
+            if (rc == BackendRecover::OTHER_HOLDER) {
                 fprintf(stderr, "[YuE2-Job] %s: %d backend ref(s) held outside YuE2, cannot recreate it\n",
                         job->id.c_str(), g_backend_refs);
                 err = "GPU backend in error state, unload models to recover";
             }
+        } else {
+            // The drain fails only when the NAR lane is stopping: the server is
+            // shutting down, the backend is not the problem.
+            err = "server shutting down, job cancelled";
         }
         if (!recovered) {
             job->result_body = err.empty() ? "GPU backend in error state, unload models to recover" : err;
