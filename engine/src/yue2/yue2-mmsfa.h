@@ -1135,6 +1135,16 @@ static bool yue2_mmsfa_emissions(const Yue2MmsfaModel & m, Yue2MmsfaGraph * g, c
         }
         return false;
     }
+    backend_fault_point("align");
+    // On Metal the submit is async: a command buffer failure only shows at
+    // synchronize, inside the tensor read below, which carries no status and
+    // would hand back garbage logits as a success (#242). Probe first.
+    if (!backend_healthy()) {
+        if (err) {
+            *err = "MMS_FA compute failed on the GPU backend (device error)";
+        }
+        return false;
+    }
 
     const int64_t NL = g->output->ne[0];  // n_labels
     const int64_t T  = g->output->ne[1];

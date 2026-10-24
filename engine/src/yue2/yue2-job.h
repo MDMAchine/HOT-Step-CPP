@@ -493,6 +493,44 @@ static void yue2_synth_worker(std::shared_ptr<Job> job, Yue2Request req_in) {
         return;
     }
 
+    // #242: a GPU backend poisoned by an earlier failed compute (Metal reports
+    // a command buffer error once, then refuses all work) would fail the AR
+    // prefill. Probe before it. Recovery must be a full teardown, not an
+    // in-place swap, since every resident buffer lives on the old backend:
+    // unload all of YuE2 (refs to 0 frees the backend), then reload fresh. If
+    // another model still holds a ref, the backend cannot be recreated here.
+    // Lock order: g_yue2_mutex (held), then g_yue2_nar_mutex, then backend.
+    if (!backend_healthy()) {
+        fprintf(stderr, "[YuE2-Job] %s: GPU backend unhealthy before prefill, unloading YuE2 to recover
+",
+                job->id.c_str());
+        bool recovered = false;
+        if (yue2_nar_lane_drain("backend recovery")) {
+            std::lock_guard<std::mutex> nar_lock(g_yue2_nar_mutex);
+            yue2_unload(&g_yue2);
+            if (g_backend_refs == 0) {
+                recovered = evict_strict ||
+                            yue2_load_parts(&g_yue2, /*want_lm=*/true, /*want_vae=*/!req->plan_only && !req->semantic_only,
+                                            req->vae_variant, /*want_encoder=*/false, &err);
+                recovered = recovered && backend_healthy();
+            } else {
+                fprintf(stderr, "[YuE2-Job] %s: %d backend ref(s) held outside YuE2, cannot recreate it
+",
+                        job->id.c_str(), g_backend_refs);
+                err = "GPU backend in error state, unload models to recover";
+            }
+        }
+        if (!recovered) {
+            job->result_body = err.empty() ? "GPU backend in error state, unload models to recover" : err;
+            job->result_mime = "text/plain";
+            job_set_phase(*job, JobPhase::FAILED);
+            job->status.store(2);
+            return;
+        }
+        fprintf(stderr, "[YuE2-Job] %s: backend recreated, continuing
+", job->id.c_str());
+    }
+
     Yue2ProgressFn progress = [job](const Yue2Progress & p) {
         job->songs_done.store(p.songs_done, std::memory_order_relaxed);
         job_set_phase(*job, yue2_job_phase_for_stage(p.stage), (int) p.step, (int) (p.total > 0 ? p.total : 0));
